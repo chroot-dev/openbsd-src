@@ -122,6 +122,8 @@
 
 #include <machine/asm.h>
 
+#include <dev/ic/comreg.h>
+
 /* XXX temporary kluge; these should not be here */
 /* Get definitions for IOM_BEGIN, IOM_END, and IOM_SIZE */
 #include <dev/isa/isareg.h>
@@ -882,6 +884,55 @@ vc_cpuid32:
 .Lterm_loop32:
 	hlt
 	jmp	.Lterm_loop32
+
+/*
+ * Entry point for VMMs that load the kernel ELF image directly using
+ * the Xen PVH boot ABI.  The XEN_ELFNOTE_PHYS32_ENTRY note below gives
+ * its physical address.  Entered in 32 bit protected mode with paging
+ * disabled and no stack; %ebx holds the physical address of struct
+ * hvm_start_info.
+ *
+ * XXX Only print a banner on COM1 and halt for now.
+ */
+	.code32
+	.globl	pvh_start
+pvh_start:
+	cli
+	movl	$RELOC(.Lpvh_msg), %esi
+.Lpvh_putc:
+	movb	(%esi), %ah
+	testb	%ah, %ah
+	jz	.Lpvh_halt
+	movl	$0x10000, %ecx		/* bounded wait for TX ready */
+	movw	$(IO_COM1 + com_lsr), %dx
+.Lpvh_txwait:
+	inb	%dx, %al
+	testb	$LSR_TXRDY, %al
+	jnz	.Lpvh_tx
+	loop	.Lpvh_txwait
+.Lpvh_tx:
+	movw	$(IO_COM1 + com_data), %dx
+	movb	%ah, %al
+	outb	%al, %dx
+	incl	%esi
+	jmp	.Lpvh_putc
+.Lpvh_halt:
+	hlt
+	jmp	.Lpvh_halt
+
+	.section .rodata
+.Lpvh_msg:
+	.asciz	"PVH\r\n"
+	.previous
+
+	.section .note.Xen,"a",@note
+	.align	4
+	.long	4			/* namesz */
+	.long	4			/* descsz */
+	.long	18			/* XEN_ELFNOTE_PHYS32_ENTRY */
+	.asciz	"Xen"
+	.long	RELOC(pvh_start)	/* entry point (PA) */
+	.previous
 
 	.section .codepatch,"a"
 	.align	8, 0xcc

@@ -27,6 +27,7 @@ PHDRS
 	data PT_LOAD;
 	bss PT_LOAD;
 	openbsd_randomize PT_OPENBSD_RANDOMIZE;
+	note PT_NOTE;
 }
 
 /*
@@ -92,6 +93,13 @@ SECTIONS
 		*(.codepatch)
 		*(.codepatchend)
 	} :rodata =0xcccccccc
+
+	. = ALIGN(4);
+	__kernel_note_phys = . + __kernel_virt_to_phys;
+	.note : AT (__kernel_note_phys)
+	{
+		*(.note.Xen)
+	} :rodata :note
 
 	. = ALIGN(__ALIGN_SIZE);
 	__kernel_kutext_page_phys = . + __kernel_virt_to_phys;
